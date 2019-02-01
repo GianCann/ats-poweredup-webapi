@@ -17,6 +17,8 @@ const socket = websockify(app);
 app.use(json());
 app.use(bodyParser());
 
+var sLog="";
+
 const COLORS = {
   off: 0,
   pink: 1,
@@ -63,9 +65,11 @@ const PORTS = ["A", "B"];
 
 poweredUP.scan();
 console.log("Looking for Hubs...");
+sLog += "Looking for Hubs...\n";
 poweredUP.on("discover", async (hub) => {
     await hub.connect();
     console.log(`Connected to ${hub.name} (${hub.uuid})`);
+    sLog += `Connected to ${hub.name} (${hub.uuid})\n`;
     
     if (hub.name=="Gianluca"){
         hub.setLEDColor(9);
@@ -73,8 +77,33 @@ poweredUP.on("discover", async (hub) => {
 
     hub.on("disconnect", () => {
         console.log(`Hub ${hub.name} (${hub.uuid}) disconnected`);
+        sLog += `Hub ${hub.name} (${hub.uuid}) disconnected\n`;
     })
 });
+
+//mostra il log su browser
+http.get("/log/", showlog);
+
+async function showlog(ctx) {
+  ctx.body = sLog;
+  await ctx;
+}
+//---------------------------------
+
+//chiude il processo, scollegando tutti gli hub
+http.get("/exit/", exitapp);
+
+async function exitapp(ctx) {
+  ctx.body = "Shutdown app...";
+  await ctx;
+  setTimeout(shutdownapp,2000);
+}
+
+function shutdownapp(){
+  console.log("Shutdown from user!");
+  process.exit(0);
+}
+//---------------------------------  
 
 http.get("/hubs/", hubs);
 
@@ -232,12 +261,13 @@ async function LEDcolorChange(ctx) {
   await ctx;
 }
 
+//imposta il nome (senza spazi)
 http.get("/hubs/:uuid/setname/:newname/", SetHubName);
 
 async function SetHubName(ctx) {
   const { uuid, newname } = ctx.params;
   //const colorValue = COLORS[color];
-  //ctx.assert(colorValue, 422, "Wrong color!");
+  //ctx.assert(colorValue, 422, "Wrong color!")  
   hub = poweredUP.getConnectedHubByUUID(uuid);
   ctx.assert(hub, 404, "Hub is not connected!");
   hub.setName(newname);
@@ -275,6 +305,104 @@ ws.get('/:uuid/sensor/color-distance', async (ctx) => {
       });
   });
 });
+
+//funzioni con pattern device/nome/comando
+
+//funzione di supporto che Restituisce 
+//l'UIDD di un un Hub, partendo dal nome impostato
+//dall'utente. Se non lo trova, restituisce stringa vuota
+function GetUIDDFromName(sname) {
+  var uidd="";
+  console.log(sname);
+  const connectedHubs = poweredUP.getConnectedHubs();
+  connectedHubs.forEach(hub => {
+    if (hub.name==sname){
+      uidd=hub.uuid;
+      }
+  });
+  return uidd;
+}
+
+//Gestione motore
+// http://localhost:3000/device/Gianluca/A/100  per impostare il motore sulla porta A al 100%
+http.get("/device/:friendlyname/:port/speed/:speed", speedControlfname);
+
+async function speedControlfname(ctx) {
+  const { friendlyname, port, speed } = ctx.params;
+  const { time } = ctx.query;
+  var uuid = GetUIDDFromName(friendlyname);
+  hub = poweredUP.getConnectedHubByUUID(uuid);
+  ctx.assert(hub, 404, "Hub is not connected!");
+  const deviceType = hub.getPortDeviceType(port);
+  ctx.assert(deviceType === 2, 422, "Motor not found on this port");
+  hub.setMotorSpeed(port, speed, parseInt(time));
+  ctx.body = { friendlyname, uuid, port, speed, time };
+  await ctx;
+}
+
+//gestione motore con rampa di partenza / discesa
+http.get("/device/:friendlyname/:port/rampspeed/:fromSpeed/:toSpeed/:time",
+  rampSpeedControlfname
+);
+
+async function rampSpeedControlfname(ctx) {
+  const { friendlyname, port, fromSpeed, toSpeed, time } = ctx.params;
+  var uuid = GetUIDDFromName(friendlyname);
+  hub = poweredUP.getConnectedHubByUUID(uuid);
+  ctx.assert(hub, 404, "Hub is not connected!");
+  const deviceType = hub.getPortDeviceType(port);
+  ctx.assert(deviceType === 2, 422, "Motor not found on this port");
+  hub.rampMotorSpeed(port, fromSpeed, toSpeed, parseInt(time));
+  ctx.body = { uuid, port, fromSpeed, toSpeed, time };
+  await ctx;
+}
+
+//imposta il colore
+http.get("/device/:friendlyname/led/:color/", LEDcolorChangefname);
+
+async function LEDcolorChangefname(ctx) {
+  const { friendlyname, color } = ctx.params;
+  const colorValue = COLORS[color];
+  ctx.assert(colorValue, 422, "Wrong color!");
+  var uuid = GetUIDDFromName(friendlyname);
+  hub = poweredUP.getConnectedHubByUUID(uuid);
+  ctx.assert(hub, 404, "Hub is not connected!");
+  hub.setLEDColor(colorValue);
+  ctx.body = { device_name: friendlyname, hub_uuid: uuid, color_value: colorValue };
+  await ctx;
+}
+
+
+//spenge il dispositivo
+http.get("/device/:friendlyname/shutdown", shutdownfname);
+
+async function shutdownfname(ctx) {
+  const { friendlyname } = ctx.params;
+  var uuid = GetUIDDFromName(friendlyname);
+  hub = poweredUP.getConnectedHubByUUID(uuid);
+  ctx.assert(hub, 404, "Hub is not connected!");
+  hub.shutdown();
+  ctx.body = hubInfo(hub);
+  await ctx;
+}
+
+//restituisce le info dal mone
+http.get("/device/:friendlyname/", hubfromname);
+
+async function hubfromname(ctx) {
+  const connectedHubs = poweredUP.getConnectedHubs();
+  const { friendlyname } = ctx.params;
+  let hubs = [];
+  connectedHubs.forEach(hub => {
+    if (hub.name==friendlyname){
+      hubs.push(hubInfo(hub));
+      }
+  });
+  ctx.body = { hubs: hubs };
+  await ctx;
+}
+
+
 
 app.use(http.routes()).use(http.allowedMethods());
 app.ws.use(ws.routes()).use(ws.allowedMethods());
