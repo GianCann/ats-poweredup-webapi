@@ -1,0 +1,35 @@
+{
+  "name": "itlug-lego-pu",
+  "version": "1.0.0",
+  "description": "REST API for LEGO Powered UP components.",
+  "main": "legohub.js",
+  "scripts": {
+    "start": "nodemon legohub.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GianCann/itlug-lego-pu.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/GianCann/itlug-lego-pu/issues"
+  },
+  "homepage": "https://github.com/GianCann/itlug-lego-pu#ReadMe",
+  "dependencies": {
+    "koa": "^2.6.2",
+    "koa-bodyparser": "^4.2.1",
+    "koa-json": "^2.0.2",
+    "koa-router": "^7.4.0",
+    "koa-websocket": "^5.0.1",
+    "node-poweredup": "^1.7.4",
+    "xpc-connection": "sandeepmistry/node-xpc-connection#pull/26/head"
+  },
+  "devDependencies": {
+    "nodemon": "^1.18.9"
+  },
+  "resolutions": {
+    "xpc-connection": "sandeepmistry/node-xpc-connection#pull/26/head"
+  }
+}
